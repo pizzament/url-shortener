@@ -2,8 +2,10 @@ package main
 
 import (
 	"log/slog"
+	"net/http"
 	"os"
 	"url-shortener/internal/config"
+	"url-shortener/internal/http-server/handlers/url/save"
 	mwLogger "url-shortener/internal/http-server/middleware/logger"
 	"url-shortener/internal/lib/logger/handlers/slogpretty"
 	sl "url-shortener/internal/lib/logger/slog"
@@ -27,9 +29,9 @@ func main() {
 	log := setupLogger(cfg.Env)
 
 	// log = log.With(slog.String("env", cfg.Env))
-	log.Info("Starting server...", slog.String("env", cfg.Env))
-	log.Debug("Debug started")
-	log.Error("ErrorErrorError")
+	// log.Info("Starting server...", slog.String("env", cfg.Env))
+	// log.Debug("Debug started")
+	// log.Error("ErrorErrorError")
 
 	storage, err := sqlite.New(cfg.StoragePath)
 	if err != nil {
@@ -49,7 +51,24 @@ func main() {
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
 
-	// TODO: run server
+	router.Post("/url", save.New(log, storage))
+
+	log.Info("Starting server...", slog.String("address", cfg.Address))
+
+	srv := &http.Server{
+		Addr:         cfg.Address,
+		Handler:      router,
+		ReadTimeout:  cfg.HTTPServerConfig.TimeOut,
+		WriteTimeout: cfg.HTTPServerConfig.TimeOut,
+		IdleTimeout:  cfg.HTTPServerConfig.IdleTimeout,
+	}
+
+	if err := srv.ListenAndServe(); err != nil {
+		log.Error("Failed to start server", sl.Err(err))
+		os.Exit(1)
+	}
+
+	log.Error("server stopped")
 }
 
 func setupLogger(env string) *slog.Logger {
